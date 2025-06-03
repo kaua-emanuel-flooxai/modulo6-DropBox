@@ -6,8 +6,24 @@ class DropBoxController {
     this.progressBarEL = this.snackModalEL.querySelector(".mc-progress-bar-fg");
     this.nameFileEL = document.querySelector("#filename");
     this.timeLeftEL = document.querySelector("#timeleft");
+    this.listFileEL = document.querySelector("#list-of-files-and-directories");
 
+    this.connectFireBase();
     this.initEvents();
+    this.redFiles();
+  }
+
+  connectFireBase() {
+    const firebaseConfig = {
+      apiKey: "AIzaSyBQqy8RHb1bb41aydCPQWOK0ZdPycMAaeg",
+      authDomain: "dropbox-clone-f33df.firebaseapp.com",
+      projectId: "dropbox-clone-f33df",
+      storageBucket: "dropbox-clone-f33df.firebasestorage.app",
+      messagingSenderId: "979745233482",
+      appId: "1:979745233482:web:0f16f87bb5f8e0d187a4b3",
+      measurementId: "G-KK6XZRX0B4",
+    };
+    firebase.initializeApp(config);
   }
 
   initEvents() {
@@ -15,12 +31,31 @@ class DropBoxController {
       this.inputFilesEL.click();
     });
 
-    this.inputFilesEL.addEventListener("change", (event) => {
-      this.modalShow(true);
-      this.uploadTask(event.target.files).then(() => {
-        this.inputFilesEL.value = "";
+    this.inputFilesEL
+      .addEventListener("change", (event) => {
+        this.btnSendFileEL.disabled = true;
+
+        this.modalShow(true);
+        this.uploadTask(event.target.files).then((response) => {
+          response.forEach((resp) => {
+            this.getFirebaseRef().push().set(resp.files["input-file"]);
+          });
+          this.uploadComplete();
+        });
+        this.modalShow();
+      })
+      .catch((err) => {
+        this.uploadComplete();
+        console.error(err);
       });
-    });
+  }
+
+  uploadComplete() {
+    this.modalShow(false);
+    this.btnSendFileEL.disabled = false;
+  }
+  getFirebaseRef() {
+    return firebase.database().ref("files");
   }
 
   modalShow(show = true) {
@@ -230,15 +265,34 @@ class DropBoxController {
     }
   }
 
-  getFileView(file) {
+  getFileView(file, key) {
     let li = document.createElement("li");
-    li.classList.add("list-group-item");
 
-    li.innerHTML = `
-    ${this.getFileIconView(file)}
-    <div class="filename">${file.name}</div>
-  `;
+    li.dataset.key = key;
+
+    li.innerHTML = ` ${this.getFileIconView(file)}
+    <div class="name text-center">${file.name}</div>`;
+
+    this.initEventsLi(li);
 
     return li;
+  }
+  redFiles() {
+    this.getFirebaseRef().on("value", (snapshot) => {
+      this.listFileEL.innerHTML = "";
+
+      snapshot.forEach((snapshotItem) => {
+        let key = snapshotItem.key;
+        let data = snapshotItem.val();
+
+        this.listFileEL.appendChild(this.getFileView(data, key));
+      });
+    });
+  }
+
+  initEventsLi(li) {
+    li.addEventListener("click", (e) => {
+      li.classList.toggle("selected");
+    });
   }
 }
