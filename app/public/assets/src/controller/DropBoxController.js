@@ -4,6 +4,7 @@ class DropBoxController {
 
     this.onSelectionChange = new Event("SelectionChange");
 
+    this.navEL = document.querySelector("#browse-location");
     this.btnSendFileEL = document.querySelector("#btn-send-file");
     this.inputFilesEL = document.querySelector("#files");
     this.snackModalEL = document.querySelector("#react-snackbar-root");
@@ -18,7 +19,7 @@ class DropBoxController {
 
     this.connectFireBase();
     this.initEvents();
-    this.redFiles();
+    this.openFolder();
   }
 
   connectFireBase() {
@@ -136,8 +137,9 @@ class DropBoxController {
     this.modalShow(false);
     this.btnSendFileEL.disabled = false;
   }
-  getFirebaseRef() {
-    return firebase.database().ref("files");
+  getFirebaseRef(path) {
+    if (!path) path = this.currentFold.join("/");
+    return firebase.database().ref(path);
   }
 
   modalShow(show = true) {
@@ -358,7 +360,9 @@ class DropBoxController {
 
     return li;
   }
-  redFiles() {
+  readFiles() {
+    this.lastFolder = this.currentFold.join("/");
+
     this.getFirebaseRef().on("value", (snapshot) => {
       this.listFileEL.innerHTML = "";
 
@@ -366,12 +370,86 @@ class DropBoxController {
         let key = snapshotItem.key;
         let data = snapshotItem.val();
 
-        this.listFileEL.appendChild(this.getFileView(data, key));
+        if (data.type) {
+          this.listFileEL.appendChild(this.getFileView(data, key));
+        }
+      });
+    });
+  }
+
+  openFolder() {
+    if (this.lastFolder) this.getFirebaseRef(this.lastFolder).off("value");
+    this.renderNav();
+    this.readFiles();
+  }
+
+  renderNav() {
+    let nav = document.createElement("nav");
+
+    for (let i = 0; i < this.currentFold.length; i++) {
+      let folderName = this.currentFold[i];
+      let span = document.createElement("span");
+
+      path.push(folderName);
+
+      if (i + 1 === this.currentFold.length) {
+        span.innerHTML = folderName;
+      } else {
+        span.className = "breadcrumb-segment__wrapper";
+        span.innerHTML = `
+                        <span
+                          class="ue-effect-container uee-BreadCrumbSegment-link-0"
+                        >
+                          <a
+                            href="#" data-path="${path.join("/")}"
+                            class="breadcrumb-segment"
+                            >${folderName}</a
+                          >
+                        </span>
+                        <svg
+                          width="24"
+                          height="24"
+                          viewBox="0 0 24 24"
+                          class="mc-icon-template-stateless"
+                          style="top: 4px; position: relative"
+                        >
+                          <title>arrow-right</title>
+                          <path
+                            d="M10.414 7.05l4.95 4.95-4.95 4.95L9 15.534 12.536 12 9 8.464z"
+                            fill="#637282"
+                            fill-rule="evenodd"
+                          ></path>
+                        </svg>`;
+      }
+      nav.appendChild(span);
+    }
+    this.navEL.innerHTML = nav.innerHTML;
+
+    this.navEL.querySelectorAll("a").forEach((a) => {
+      a.addEventListener("click", (e) => {
+        e.preventDefault();
+
+        this.currentFold = a.dataset.path.split("/");
+
+        this.openFolder();
       });
     });
   }
 
   initEventsLi(li) {
+    li.addEventListener("dblclick", (e) => {
+      let file = JSON.parse(li.dataset.file);
+
+      switch (file.type) {
+        case "folder":
+          this.currentFold.push(file.name);
+          this.openFolder();
+          break;
+        default:
+          window.open("/file?path=" + file.path);
+      }
+    });
+
     li.addEventListener("click", (e) => {
       if (e.shiftKey) {
         let firstLi = this.listFileEL.querySelector(".selected");
