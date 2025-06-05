@@ -121,7 +121,12 @@ class DropBoxController {
         this.modalShow(true);
         this.uploadTask(event.target.files).then((response) => {
           response.forEach((resp) => {
-            this.getFirebaseRef().push().set(resp.files["input-file"]);
+            this.getFirebaseRef().push().set({
+              name: resp.name,
+              type: content.type,
+              path: resp.downloadURLs[0],
+              size: resp.size,
+            });
           });
           this.uploadComplete();
         });
@@ -163,23 +168,53 @@ class DropBoxController {
   }
 
   uploadTask(files) {
-    const promises = [];
-
     [...files].forEach((file) => {
-      const formData = new FormData();
-      formData.append("input-file", file);
+      let fileRef = firebase
+        .storage()
+        .ref(this.currentFold.join("/"))
+        .child(file.name);
 
-      const promise = this.ajax(
-        "/upload",
-        "POST",
-        formData,
-        (event) => this.uploadProgress(event, file),
-        () => {
-          this.startUploadTime = Date.now();
-        }
+      let task = fileRef.put(file);
+
+      task.on("state_changed", () => {});
+
+      promises.push(
+        new Promise((reolve, reject) => {
+          let fileRef = firebase
+            .storage()
+            .ref(this.currentFold.join("/"))
+            .child(file.name);
+
+          let task = fileRef.put(file);
+
+          task.on(
+            "state_changed",
+            (snapshot) => {
+              this.uploadProgress(
+                {
+                  loaded: snapshot.bytesTransferrd,
+                  total: snapshot.totalBytes,
+                },
+                file
+              );
+            },
+            (error) => {
+              console.error(error);
+              reject(error);
+            },
+            () => [
+              fileRef
+                .getMetadata()
+                .then((Metadata) => {
+                  resolve(Metadata);
+                })
+                .catch((err) => {
+                  reject(err);
+                }),
+            ]
+          );
+        })
       );
-
-      promises.push(promise);
     });
 
     return Promise.all(promises);
